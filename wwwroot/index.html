@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión de Tesis</title>
+<style>
+  :root { --magenta:#c2007a; --magenta-dark:#8e0059; --magenta-light:#fde6f4; --ink:#2a1020; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Arial,sans-serif; background:var(--magenta-light); color:var(--ink); }
+  header { background:var(--magenta); color:#fff; padding:18px 24px; font-size:1.4rem; font-weight:700; }
+  main { max-width:1000px; margin:20px auto; padding:0 16px; display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  section { background:#fff; border-top:5px solid var(--magenta); border-radius:8px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,.1); }
+  section.wide { grid-column:1/-1; }
+  h2 { margin:0 0 12px; color:var(--magenta-dark); font-size:1.1rem; }
+  label { display:block; font-size:.85rem; margin-top:8px; }
+  input,select { width:100%; padding:8px; border:1px solid #d8a6c6; border-radius:6px; font-size:.95rem; }
+  button { margin-top:12px; background:var(--magenta); color:#fff; border:0; padding:9px 16px; border-radius:6px; cursor:pointer; font-weight:600; }
+  button:hover { background:var(--magenta-dark); }
+  .msg { margin-top:10px; padding:8px; border-radius:6px; font-size:.9rem; display:none; }
+  .ok { background:#e6f9ec; color:#0a5b2a; display:block; }
+  .err { background:#fde8e8; color:#8a1111; display:block; }
+  .card { display:flex; gap:12px; border:1px solid #efc3df; border-radius:8px; padding:10px; margin-top:10px; }
+  .card img { width:90px; height:90px; object-fit:cover; border-radius:6px; background:#f3d3e7; }
+  .card h3 { margin:0 0 4px; font-size:1rem; color:var(--magenta-dark); }
+  .tag { display:inline-block; background:var(--magenta); color:#fff; border-radius:10px; padding:1px 8px; font-size:.75rem; }
+  .small { font-size:.85rem; color:#5a3a4d; }
+</style>
+</head>
+<body>
+<header>🎓 Gestión de Tesis y Tutores</header>
+<main>
+  <section>
+    <h2>1) Registrar tutor</h2>
+    <form id="fTutor">
+      <label>Nombre<input name="nombre" required minlength="3"></label>
+      <label>Especialidad<input name="especialidad" required minlength="3"></label>
+      <label>Correo<input name="correo" type="email" required></label>
+      <button>Guardar tutor</button>
+    </form>
+    <div id="mTutor" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>2) Registrar tesis</h2>
+    <form id="fTesis">
+      <label>Título<input name="titulo" required minlength="5"></label>
+      <label>Estudiante<input name="estudiante" required minlength="3"></label>
+      <label>Estado
+        <select name="estado">
+          <option>Pendiente</option><option>EnProgreso</option><option>Aprobada</option><option>Rechazada</option>
+        </select>
+      </label>
+      <label>Tutor<select name="idTutor" id="selTutor" required></select></label>
+      <button>Guardar tesis</button>
+    </form>
+    <div id="mTesis" class="msg"></div>
+  </section>
+
+  <section>
+    <h2>4) Subir imagen a una tesis</h2>
+    <form id="fImg">
+      <label>Tesis<select id="selTesis" required></select></label>
+      <label>Imagen (jpg, png, webp · máx 2 MB)<input type="file" name="archivo" accept=".jpg,.jpeg,.png,.webp" required></label>
+      <button>Subir imagen</button>
+    </form>
+    <div id="mImg" class="msg"></div>
+  </section>
+
+  <section class="wide">
+    <h2>3) Buscar tesis y mostrar tutor</h2>
+    <form id="fBuscar" style="display:flex;gap:8px">
+      <input id="q" placeholder="Título o estudiante (vacío = todas)">
+      <button style="margin-top:0">Buscar</button>
+    </form>
+    <div id="resultados"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const show = (el, text, ok) => { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); };
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const detalle = data.detail || (data.errors ? Object.values(data.errors).flat().join(' ') : data.title) || 'Error';
+    throw new Error(detalle);
+  }
+  return data;
+}
+
+async function cargarTutores() {
+  const t = await api('/api/tutores');
+  $('#selTutor').innerHTML = t.map(x => `<option value="${x.id}">${x.nombre} (${x.cantidadTesis}/3)</option>`).join('');
+}
+async function cargarTesisSelect() {
+  const t = await api('/api/tesis');
+  $('#selTesis').innerHTML = t.map(x => `<option value="${x.id}">${x.titulo}</option>`).join('');
+}
+async function buscar() {
+  const q = encodeURIComponent($('#q').value);
+  const lista = await api('/api/tesis?q=' + q);
+  $('#resultados').innerHTML = lista.length ? lista.map(t => `
+    <div class="card">
+      <img src="${t.imagen || ''}" alt="" onerror="this.style.visibility='hidden'">
+      <div>
+        <h3>${t.titulo}</h3>
+        <div class="small">Estudiante: ${t.estudiante} · <span class="tag">${t.estado}</span></div>
+        <div class="small"><b>Tutor:</b> ${t.tutor.nombre} — ${t.tutor.especialidad} — ${t.tutor.correo}</div>
+      </div>
+    </div>`).join('') : '<p class="small">Sin resultados.</p>';
+}
+async function refrescar() { await Promise.all([cargarTutores(), cargarTesisSelect(), buscar()]); }
+
+$('#fTutor').onsubmit = async e => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  try {
+    await api('/api/tutores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(f) });
+    show($('#mTutor'), 'Tutor guardado ✔', true); e.target.reset(); await cargarTutores();
+  } catch (err) { show($('#mTutor'), err.message, false); }
+};
+$('#fTesis').onsubmit = async e => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  f.idTutor = Number(f.idTutor);
+  try {
+    await api('/api/tesis', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(f) });
+    show($('#mTesis'), 'Tesis guardada ✔', true); e.target.reset(); await refrescar();
+  } catch (err) { show($('#mTesis'), err.message, false); }
+};
+$('#fImg').onsubmit = async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await api(`/api/tesis/${$('#selTesis').value}/imagen`, { method:'POST', body:fd });
+    show($('#mImg'), 'Imagen subida ✔', true); e.target.reset(); await buscar();
+  } catch (err) { show($('#mImg'), err.message, false); }
+};
+$('#fBuscar').onsubmit = e => { e.preventDefault(); buscar().catch(console.error); };
+
+refrescar().catch(console.error);
+</script>
+</body>
+</html>
